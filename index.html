@@ -613,8 +613,15 @@
     const {cid, expId} = CUR;
     const uid = getCurrentUid();
     wrap.innerHTML = '<p class="hint-sm">جارٍ التحميل...</p>';
-    const data = await fsGetDoc('lab_submissions', uid);
-    const sub = data ? data[subKey(cid, expId)] : null;
+    let sub = null;
+    try{
+      const data = await fsGetDoc('lab_submissions', uid);
+      sub = data ? data[subKey(cid, expId)] : null;
+    }catch(err){
+      console.error(err);
+      wrap.innerHTML = '<p class="hint-sm" style="color:#B42318;">تعذّر تحميل حالة التسليم، تحققي من الإنترنت وحاولي مرة أخرى.</p>';
+      return;
+    }
     let status;
     if(sub){
       const gradeLine = sub.grade ? `<br>التقييم: ${sub.grade} / 5` : '<br>لم يتم تقييم التقرير بعد.';
@@ -672,8 +679,11 @@
       fileInput.value = '';
       setTimeout(() => { if(CUR.tab === 'tasks') renderExpTab(); }, 1200);
     }catch(err){
+      console.error(err);
       okEl.style.display = 'none';
-      errEl.textContent = 'حدث خطأ أثناء الرفع، حاولي مرة أخرى.'; errEl.style.display = 'block';
+      const denied = String((err && err.code) || err).includes('permission');
+      errEl.textContent = denied ? 'حدث خطأ: إعدادات Firebase تمنع الرفع، تأكدي من قواعد الأمان.' : 'حدث خطأ أثناء الرفع، حاولي مرة أخرى.';
+      errEl.style.display = 'block';
     }
   }
 
@@ -801,20 +811,27 @@
     }
     if(!finalUrl){ successEl.textContent = 'أضيفي رابطًا أو ارفعي ملفًا.'; successEl.style.display = 'block'; return; }
 
-    await loadSettings();
-    const cat = Object.assign({}, SETTINGS[categoryId] || {});
-    cat[courseId] = (cat[courseId] || []).slice();
-    const item = {id: Date.now().toString(), title, url: finalUrl};
-    if(expId !== GENERAL) item.expId = expId;
-    cat[courseId].push(item);
-    await updateLabSettings({[categoryId]: cat});
-    await loadSettings();
-    renderCoursesGrid();
+    try{
+      await loadSettings();
+      const cat = Object.assign({}, SETTINGS[categoryId] || {});
+      cat[courseId] = (cat[courseId] || []).slice();
+      const item = {id: Date.now().toString(), title, url: finalUrl};
+      if(expId !== GENERAL) item.expId = expId;
+      cat[courseId].push(item);
+      await updateLabSettings({[categoryId]: cat});
+      await loadSettings();
+      renderCoursesGrid();
 
-    document.getElementById('admItemTitle').value = '';
-    document.getElementById('admItemUrl').value = '';
-    fileInput.value = '';
-    successEl.textContent = 'تمت إضافة العنصر بنجاح ✓'; successEl.style.display = 'block';
+      document.getElementById('admItemTitle').value = '';
+      document.getElementById('admItemUrl').value = '';
+      fileInput.value = '';
+      successEl.textContent = 'تمت إضافة العنصر بنجاح ✓'; successEl.style.display = 'block';
+    }catch(err){
+      console.error(err);
+      const denied = String((err && err.code) || err).includes('permission');
+      successEl.textContent = denied ? 'حدث خطأ: إعدادات Firebase تمنع الحفظ، تأكدي من قواعد الأمان.' : 'حدث خطأ أثناء حفظ العنصر، حاولي مرة أخرى.';
+      successEl.style.display = 'block';
+    }
   }
 
   async function deleteContentItem(catId, cid, itemId){
@@ -835,7 +852,15 @@
     const key = subKey(courseId, expId);
     const wrap = document.getElementById('taskSubmissionsWrap');
     wrap.innerHTML = '<p class="hint-sm">جارٍ التحميل...</p>';
-    const allSubs = await fsGetAllDocs('lab_submissions');
+    let allSubs = {};
+    try{
+      allSubs = await fsGetAllDocs('lab_submissions');
+    }catch(err){
+      console.error(err);
+      const denied = String((err && err.code) || err).includes('permission');
+      wrap.innerHTML = `<p class="hint-sm" style="color:#B42318;">${denied ? 'تعذّر تحميل التسليمات: إعدادات Firebase تمنع الوصول.' : 'حدث خطأ أثناء التحميل، حاولي مرة أخرى.'}</p>`;
+      return;
+    }
     const rows = [];
     Object.keys(allSubs).forEach(uid => {
       const sub = allSubs[uid][key];
@@ -895,7 +920,14 @@
   async function renderFinalAverages(){
     const wrap = document.getElementById('finalAveragesWrap');
     wrap.innerHTML = '<p class="hint-sm">جارٍ التحميل...</p>';
-    const allSubs = await fsGetAllDocs('lab_submissions');
+    let allSubs = {};
+    try{
+      allSubs = await fsGetAllDocs('lab_submissions');
+    }catch(err){
+      console.error(err);
+      wrap.innerHTML = '<p class="hint-sm" style="color:#B42318;">حدث خطأ أثناء التحميل، حاولي مرة أخرى.</p>';
+      return;
+    }
     let profiles = {};
     try{ profiles = await getAllProfiles(); }catch(e){}
     const rows = [];
@@ -935,7 +967,6 @@
   }
   init();
 </script>
-
 
 </body>
 </html>
